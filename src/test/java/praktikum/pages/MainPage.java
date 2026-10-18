@@ -4,43 +4,100 @@ import io.qameta.allure.Step;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.support.ui.ExpectedConditions;
+import praktikum.models.LoginCredentials;
+import praktikum.models.User;
+import praktikum.utils.ApiHelper;
+import praktikum.utils.TestUtils;
 
 public class MainPage extends BasePage {
 
-    // Кнопки и основные элементы
-    private By loginButton = By.xpath("//button[text()='Войти в аккаунт']");
-    private By personalAccountButton = By.xpath("//p[text()='Личный Кабинет']");
-    private By logoutButton = By.xpath("//button[text()='Выход']");
-    public By constructorHeader = By.xpath("//h1[contains(text(),'Соберите бургер')]");
-    public By orderInProgress = By.xpath("//p[text()='Ваш заказ начали готовить']");
-    public By orderButton = By.xpath("//button[contains(text(),'Оформить заказ')]");
-    public By orderIdLocator = By.xpath("//p[@class='text text_type_digits-large']");
+    // --- Поля для хранения данных тестового пользователя (нужны для очистки в tearDown) ---
+    protected String accessTokenForCleanup;
+    protected User testUser;
+    // ------------------------------------------------------------------------------------
 
-    // --- Ингредиенты ---
-    public By ingredientBun = By.xpath("//p[text()='Флюоресцентная булка R2-D3']/ancestor::a");
-    public By ingredientSauce = By.xpath("//p[text()='Соус традиционный галактический']/ancestor::a");
-    public By ingredientMain = By.xpath("//p[text()='Мясо бессмертных моллюсков Protostomia']/ancestor::a");
+    // Кнопки и основные элементы страницы
+    private final By loginButton = By.xpath("//button[text()='Войти в аккаунт']");
+    private final By personalAccountButton = By.xpath("//p[text()='Личный Кабинет']");
+    private final By logoutButton = By.xpath("//button[text()='Выход']");
 
-    // Локаторы для ВКЛАДОК КОНСТРУКТОРА (для клика)
-    private By bunsSection = By.xpath("//span[text()='Булки']/parent::div");
-    private By saucesSection = By.xpath("//span[text()='Соусы']/parent::div");
-    private By fillingsSection = By.xpath("//span[text()='Начинки']/parent::div");
+    public final By constructorHeader = By.xpath("//h1[contains(text(),'Соберите бургер')]");
+    public final By orderInProgress = By.xpath("//p[text()='Ваш заказ начали готовить']");
+    public final By orderButton = By.xpath("//button[contains(text(),'Оформить заказ')]");
+    public final By orderIdLocator = By.xpath("//p[@class='text text_type_digits-large']");
 
-    // Локаторы для АКТИВНЫХ (выбранных) вкладок
-    private By activeBunsTab = By.xpath(".//div[contains(@class, 'tab_tab_type_current__')]/span[text()='Булки']");
-    private By activeSaucesTab = By.xpath(".//div[contains(@class, 'tab_tab_type_current__')]/span[text()='Соусы']");
-    private By activeFillingsTab = By.xpath(".//div[contains(@class, 'tab_tab_type_current__')]/span[text()='Начинки']");
+    // Локаторы ингредиентов
+    private final By ingredientBun = By.xpath("//p[text()='Флюоресцентная булка R2-D3']/ancestor::a");
+    private final By ingredientSauce = By.xpath("//p[text()='Соус традиционный галактический']/ancestor::a");
+    // Логически это начинка (Filling), хотя поле названо ingredientMain
+    private final By ingredientMain = By.xpath("//p[text()='Мясо бессмертных моллюсков Protostomia']/ancestor::a");
 
-    // Локаторы для ЗАГОЛОВКОВ разделов (h2)
-    private By bunsTitle = By.xpath("//h2[text()='Булки']");
-    private By saucesTitle = By.xpath("//h2[text()='Соусы']");
-    private By fillingsTitle = By.xpath("//h2[text()='Начинки']");
+    // Вкладки конструктора (для клика)
+    private final By bunsSection = By.xpath("//span[text()='Булки']/parent::div");
+    private final By saucesSection = By.xpath("//span[text()='Соусы']/parent::div");
+    private final By fillingsSection = By.xpath("//span[text()='Начинки']/parent::div");
+
+    // Активные вкладки (проверка состояния)
+    private final By activeBunsTab = By.xpath(".//div[contains(@class, 'tab_tab_type_current__')]/span[text()='Булки']");
+    private final By activeSaucesTab = By.xpath(".//div[contains(@class, 'tab_tab_type_current__')]/span[text()='Соусы']");
+    private final By activeFillingsTab = By.xpath(".//div[contains(@class, 'tab_tab_type_current__')]/span[text()='Начинки']");
+
+    // Заголовки разделов
+    private final By bunsTitle = By.xpath("//h2[text()='Булки']");
+    private final By saucesTitle = By.xpath("//h2[text()='Соусы']");
+    private final By fillingsTitle = By.xpath("//h2[text()='Начинки']");
 
     public MainPage(WebDriver driver) {
         super(driver);
     }
 
-    // Методы для работы с кнопками
+    /**
+     * Шаг подготовки тестового пользователя: регистрация через API, логин, сохранение токена.
+     * Выносится сюда, чтобы убрать дублирование кода из тестов (LoginTests, ConstructorTests, OrderTests).
+     */
+    @Step("Подготовить тестового пользователя для входа: зарегистрировать через API и получить токен")
+    public void prepareTestUserForLogin() {
+        String email = TestUtils.generateRandomEmail();
+        String password = TestUtils.generateRandomPassword();
+        String name = TestUtils.generateRandomName();
+
+        this.testUser = new User(email, password, name);
+        ApiHelper.registerUser(this.testUser).assertThat().statusCode(200);
+
+        var loginResponse = ApiHelper.loginUser(new LoginCredentials(email, password));
+        loginResponse.assertThat().statusCode(200);
+        this.accessTokenForCleanup = ApiHelper.extractAccessToken(loginResponse);
+
+        System.out.println("Test user prepared: " + email);
+    }
+
+    // Геттеры для доступа к данным из теста (чтобы забрать токен и юзера для очистки)
+    public String getAccessTokenForCleanup() {
+        return accessTokenForCleanup;
+    }
+
+    public User getTestUser() {
+        return testUser;
+    }
+
+    // ==========================================================
+    // ГЕТТЕРЫ ДЛЯ ИНГРЕДИЕНТОВ (ИСПРАВЛЕНИЕ ОШИБКИ В ТЕСТАХ)
+    // ==========================================================
+    public By getIngredientBun() {
+        return ingredientBun;
+    }
+
+    public By getIngredientSauce() {
+        return ingredientSauce;
+    }
+
+    public By getIngredientFilling() {
+        // Возвращаем локатор ingredientMain, так как это и есть начинка (мясо)
+        return ingredientMain;
+    }
+    // ==========================================================
+
+    // --- Методы для кнопок ---
     @Step("Клик по кнопке 'Войти в аккаунт'")
     public void clickLoginButton() {
         click(loginButton);
@@ -61,7 +118,7 @@ public class MainPage extends BasePage {
         click(orderButton);
     }
 
-    // Методы для работы с разделами конструктора
+    // --- Методы для вкладок конструктора ---
     @Step("Клик по разделу 'Булки'")
     public void clickBunsSection() {
         click(bunsSection);
@@ -77,7 +134,7 @@ public class MainPage extends BasePage {
         click(fillingsSection);
     }
 
-    // Методы для проверки АКТИВНОСТИ разделов
+    // --- Проверки активности вкладок ---
     @Step("Проверка, что раздел 'Булки' активен")
     public boolean isBunsSectionActive() {
         return isElementDisplayed(activeBunsTab);
@@ -93,7 +150,7 @@ public class MainPage extends BasePage {
         return isElementDisplayed(activeFillingsTab);
     }
 
-    // Методы для проверки видимости ЗАГОЛОВКОВ разделов
+    // --- Проверки видимости заголовков ---
     @Step("Проверка видимости заголовка 'Булки'")
     public boolean isBunsTitleDisplayed() {
         return isElementDisplayed(bunsTitle);
@@ -109,7 +166,7 @@ public class MainPage extends BasePage {
         return isElementDisplayed(fillingsTitle);
     }
 
-    // Методы для общих проверок страницы
+    // --- Общие проверки страницы ---
     @Step("Проверка отображения конструктора")
     public boolean isConstructorDisplayed() {
         waitForVisibility(constructorHeader);
@@ -126,10 +183,11 @@ public class MainPage extends BasePage {
         waitForVisibility(constructorHeader);
     }
 
-    // Методы для работы с заказом
+    // --- Работа с заказом (добавление ингредиентов) ---
     @Step("Добавление ингредиента в конструктор")
     public void addIngredientToBurger(By ingredientLocator) {
         click(ingredientLocator);
+        // Ждем появления счетчика, чтобы убедиться, что клик сработал
         wait.until(ExpectedConditions.visibilityOfElementLocated(
                 By.xpath("//div[contains(@class, 'counter_counter__')]")));
     }
@@ -149,17 +207,6 @@ public class MainPage extends BasePage {
             return false;
         }
     }
-
-    // Геттеры для ингредиентов
-    public By getIngredientBun() {
-        return ingredientBun;
-    }
-
-    public By getIngredientSauce() {
-        return ingredientSauce;
-    }
-
-    public By getIngredientFilling() {
-        return ingredientMain;
-    }
 }
+
+

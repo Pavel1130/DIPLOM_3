@@ -3,14 +3,12 @@ package praktikum.tests;
 import io.qameta.allure.Description;
 import io.qameta.allure.junit4.DisplayName;
 import org.junit.*;
-import praktikum.models.LoginCredentials;
 import praktikum.models.User;
 import praktikum.pages.ForgotPasswordPage;
 import praktikum.pages.LoginPage;
 import praktikum.pages.MainPage;
 import praktikum.pages.RegistrationPage;
 import praktikum.utils.ApiHelper;
-import praktikum.utils.TestUtils;
 import static org.junit.Assert.assertTrue;
 
 @DisplayName("Тесты входа")
@@ -21,15 +19,17 @@ public class LoginTests extends BaseTest {
     @Before
     public void setUp() {
         super.setUp();
-        // Создание уникального пользователя через API перед каждым тестом
-        String email = TestUtils.generateRandomEmail();
-        String password = TestUtils.generateRandomPassword();
-        String name = TestUtils.generateRandomName();
-        testUser = new User(email, password, name);
-        ApiHelper.registerUser(testUser).assertThat().statusCode(200);
-        var loginResponse = ApiHelper.loginUser(new LoginCredentials(email, password));
-        loginResponse.assertThat().statusCode(200);
-        accessTokenForCleanup = ApiHelper.extractAccessToken(loginResponse);
+
+        // Инициализируем страницу
+        MainPage mainPage = new MainPage(driver);
+
+        // Вызываем шаг подготовки пользователя, который теперь находится в MainPage
+        // Внутри этого метода происходит генерация данных, регистрация и логин через ApiHelper
+        mainPage.prepareTestUserForLogin();
+
+        // Получаем данные для очистки через геттеры страницы
+        this.accessTokenForCleanup = mainPage.getAccessTokenForCleanup();
+        this.testUser = mainPage.getTestUser();
     }
 
     @Test
@@ -40,9 +40,11 @@ public class LoginTests extends BaseTest {
         MainPage mainPage = new MainPage(driver);
         mainPage.waitForPageToLoad();
         mainPage.clickLoginButton();
+
         LoginPage loginPage = new LoginPage(driver);
         loginPage.waitForPageToLoad();
         loginPage.login(testUser.getEmail(), testUser.getPassword());
+
         mainPage.waitForPageToLoad();
         assertTrue("Конструктор не отображается после входа", mainPage.isLoggedIn());
     }
@@ -55,9 +57,11 @@ public class LoginTests extends BaseTest {
         MainPage mainPage = new MainPage(driver);
         mainPage.waitForPageToLoad();
         mainPage.clickPersonalAccountButton();
+
         LoginPage loginPage = new LoginPage(driver);
         loginPage.waitForPageToLoad();
         loginPage.login(testUser.getEmail(), testUser.getPassword());
+
         mainPage.waitForPageToLoad();
         assertTrue("Конструктор не отображается после входа", mainPage.isLoggedIn());
     }
@@ -70,9 +74,11 @@ public class LoginTests extends BaseTest {
         RegistrationPage registrationPage = new RegistrationPage(driver);
         registrationPage.waitForPageToLoad();
         registrationPage.clickLoginLink();
+
         LoginPage loginPage = new LoginPage(driver);
         loginPage.waitForPageToLoad();
         loginPage.login(testUser.getEmail(), testUser.getPassword());
+
         MainPage mainPage = new MainPage(driver);
         mainPage.waitForPageToLoad();
         assertTrue("Конструктор не отображается после входа", mainPage.isLoggedIn());
@@ -85,9 +91,11 @@ public class LoginTests extends BaseTest {
         driver.get(baseUrl + "/forgot-password");
         ForgotPasswordPage forgotPasswordPage = new ForgotPasswordPage(driver);
         forgotPasswordPage.clickLoginLink();
+
         LoginPage loginPage = new LoginPage(driver);
         loginPage.waitForPageToLoad();
         loginPage.login(testUser.getEmail(), testUser.getPassword());
+
         MainPage mainPage = new MainPage(driver);
         mainPage.waitForPageToLoad();
         assertTrue("Конструктор не отображается после входа", mainPage.isLoggedIn());
@@ -95,13 +103,20 @@ public class LoginTests extends BaseTest {
 
     @After
     public void tearDown() {
+        // Сначала выполняем очистку, только потом базовый tearDown
         if (accessTokenForCleanup != null && !accessTokenForCleanup.isEmpty()) {
             System.out.println("Attempting to delete user via API...");
             try {
                 var deleteResponse = ApiHelper.deleteUser("Bearer " + accessTokenForCleanup);
-                System.out.println("Delete user API response status: " + deleteResponse.getStatusCode());
+                int status = deleteResponse.getStatusCode();
+                System.out.println("Delete user API response status: " + status);
+
+                if (status != 200) {
+                    Assert.fail("Failed to delete test user via API. Status code: " + status + ". Database cleanup failed.");
+                }
             } catch (Exception e) {
                 System.err.println("Error during user cleanup via API: " + e.getMessage());
+                throw new RuntimeException("User cleanup failed: " + e.getMessage(), e);
             }
         }
         super.tearDown();
