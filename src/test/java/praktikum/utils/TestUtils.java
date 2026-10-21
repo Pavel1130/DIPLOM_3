@@ -18,9 +18,10 @@ public class TestUtils {
     static {
         try (InputStream input = TestUtils.class.getClassLoader().getResourceAsStream("application.properties")) {
             if (input == null) {
-                System.out.println("Sorry, unable to find application.properties");
+                System.out.println("[TestUtils] WARNING: Unable to find application.properties");
             } else {
                 properties.load(input);
+                System.out.println("[TestUtils] application.properties loaded successfully");
             }
         } catch (IOException ex) {
             ex.printStackTrace();
@@ -28,12 +29,17 @@ public class TestUtils {
     }
 
     public static String getBaseUrl() {
-        return properties.getProperty("base.url", "https://stellarburgers.nomoreparties.site");
+        String value = properties.getProperty("base.url");
+        if (value != null) {
+            System.out.println("[TestUtils] base.url from application.properties: " + value);
+        } else {
+            System.out.println("[TestUtils] base.url using default: https://qa-stellarburgers.education-services.ru");
+        }
+        // Важно: не добавляем слэш в конце здесь — он добавляется в ApiHelper
+        return value != null ? value : "https://qa-stellarburgers.education-services.ru";
     }
 
-    // Метод для получения типа браузера из системного свойства или properties файла
     public static String getBrowserType() {
-        // Приоритет: системное свойство -> application.properties -> значение по умолчанию
         return System.getProperty("browser.type", properties.getProperty("browser.type", "chrome"));
     }
 
@@ -44,20 +50,19 @@ public class TestUtils {
         options.addArguments("--remote-allow-origins=*");
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
-        if ("yandex".equalsIgnoreCase(browserType)) {
-
-        }
+        // Если понадобится поддержка Yandex Browser, можно раскомментировать логику
         return new ChromeDriver(options);
     }
 
-    // Методы для генерации данных с использованием JavaFaker
     public static String generateRandomEmail() {
         return faker.internet().emailAddress();
     }
+
     public static String generateRandomName() {
         return faker.name().firstName();
     }
+
     public static String generateRandomPassword() {
-        return faker.internet().password(8, 15, true, true); // мин. 8, макс. 15, с цифрами, со спец. символами
+        return faker.internet().password(8, 15, true, true);
     }
 }

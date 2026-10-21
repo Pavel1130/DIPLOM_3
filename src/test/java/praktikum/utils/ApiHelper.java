@@ -10,15 +10,17 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 public class ApiHelper {
+    // Формируем BASE_URI: base.url + "/api"
     private static final String BASE_URI = TestUtils.getBaseUrl() + "/api";
 
     static {
         RestAssured.baseURI = BASE_URI;
+        System.out.println("[ApiHelper] RestAssured.baseURI set to: " + BASE_URI);
     }
 
-    // Используем POJO для сериализации
     public static ValidatableResponse registerUser(User user) {
         return given()
+                .log().all()                 // <-- ПОКАЗЫВАЕТ В КОНСОЛИ ПОЛНЫЙ ЗАПРОС (URL, заголовки, тело)
                 .contentType(ContentType.JSON)
                 .body(user)
                 .when()
@@ -26,9 +28,9 @@ public class ApiHelper {
                 .then();
     }
 
-    // Используем POJO для сериализации
     public static ValidatableResponse loginUser(LoginCredentials credentials) {
         return given()
+                .log().all()
                 .contentType(ContentType.JSON)
                 .body(credentials)
                 .when()
@@ -38,19 +40,18 @@ public class ApiHelper {
 
     public static Response deleteUser(String accessToken) {
         return given()
+                .log().all()
                 .contentType(ContentType.JSON)
-                .header("Authorization", accessToken) // Ожидается формат "Bearer <token>"
+                .header("Authorization", accessToken)
                 .when()
                 .delete("/auth/user");
     }
 
-    // Метод для удобного получения токена из ответа логина
     public static String extractAccessToken(ValidatableResponse loginResponse) {
         loginResponse.assertThat().body("accessToken", notNullValue());
-        // Извлекаем токен (убираем "Bearer " префикс, если он есть)
         String fullToken = loginResponse.extract().path("accessToken");
         if (fullToken != null && fullToken.startsWith("Bearer ")) {
-            return fullToken.substring(7); // "Bearer ".length()
+            return fullToken.substring(7);
         }
         return fullToken;
     }
