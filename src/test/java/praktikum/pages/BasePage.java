@@ -25,48 +25,22 @@ public class BasePage {
         wait.until(ExpectedConditions.elementToBeClickable(locator));
     }
 
-    @Step("Ожидание исчезновения элемента {locator}")
-    public void waitForInvisibility(By locator) {
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(locator));
-    }
-
-    @Step("Ожидание, что URL содержит {urlPart}")
-    public void waitForUrlToContain(String urlPart) {
-        wait.until(ExpectedConditions.urlContains(urlPart));
-    }
-
     @Step("Клик по элементу {locator}")
     public void click(By locator) {
-        int attempts = 0;
-        while (attempts < 2) {
-            try {
-                waitForClickable(locator);
-                driver.findElement(locator).click();
-                return;
-            } catch (ElementClickInterceptedException e) {
-                System.out.println("ElementClickInterceptedException on attempt " + (attempts + 1) + ". Retrying with JS click...");
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(ie);
-                }
-                WebElement element = driver.findElement(locator);
-                ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", element);
-                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", element);
-                return; // Считаем, что JS клик сработал
-            } catch (StaleElementReferenceException e) {
-                System.out.println("StaleElementReferenceException on attempt " + (attempts + 1) + ". Retrying...");
-                attempts++;
-                if (attempts >= 2) {
-                    throw e;
-                }
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                }
-            }
+        try {
+            waitForClickable(locator);
+            driver.findElement(locator).click();
+        } catch (ElementClickInterceptedException e) {
+            // Элемент перекрыт: скроллим и кликаем через JS
+            WebElement element = driver.findElement(locator);
+            ((JavascriptExecutor) driver).executeScript(
+                    "arguments[0].scrollIntoView({block: 'center'});", element
+            );
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", element);
+        } catch (StaleElementReferenceException e) {
+            // Элемент устарел — делаем повторную попытку ровно один раз
+            waitForClickable(locator);
+            driver.findElement(locator).click();
         }
     }
 
@@ -92,15 +66,5 @@ public class BasePage {
         } catch (TimeoutException | NoSuchElementException e) {
             return false;
         }
-    }
-
-    @Step("Получение текущего URL")
-    public String getCurrentUrl() {
-        return driver.getCurrentUrl();
-    }
-
-    // Метод для ожидания загрузки страницы
-    @Step("Ожидание загрузки страницы")
-    public void waitForPageToLoad() {
     }
 }
